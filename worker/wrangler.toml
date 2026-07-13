@@ -1,0 +1,8 @@
+name = "manual-of-me-api"
+main = "manual-of-me-worker.js"
+compatibility_date = "2026-07-13"
+account_id = "a7e20bd5cf3b306f6b3d65d9b8364a47"
+
+# The kv_namespaces block below is filled in by the deploy workflow
+# after `wrangler kv namespace create MANUAL_OF_ME` returns an id,
+# on the very first run only (subsequent runs reuse the committed id).
