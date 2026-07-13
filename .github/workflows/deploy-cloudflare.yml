@@ -33,7 +33,7 @@ jobs:
         working-directory: worker
         run: |
           set -e
-          if grep -q "kv_namespaces" wrangler.toml; then
+          if grep -q "^\[\[kv_namespaces\]\]" wrangler.toml; then
             echo "KV binding already present in wrangler.toml, skipping creation."
             exit 0
           fi
