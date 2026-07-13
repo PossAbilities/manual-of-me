@@ -91,22 +91,39 @@ jobs:
           WORKER_URL="https://manual-of-me-api.digital-a7e.workers.dev"
           PAGES_URL="https://manual-of-me.pages.dev"
 
+          # Freshly deployed Workers/Pages can take a few seconds to propagate
+          # to the edge, so retry each check instead of failing immediately.
+          retry() {
+            local desc="$1"; shift
+            local out
+            for i in 1 2 3 4 5 6; do
+              if out=$(curl -sS -f "$@" 2>&1); then
+                echo "$out"
+                return 0
+              fi
+              echo "[$desc] attempt $i failed, retrying in 5s: $out" >&2
+              sleep 5
+            done
+            echo "[$desc] all attempts failed" >&2
+            return 1
+          }
+
           echo "== GET before save (expect {}) =="
-          curl -sS -f "$WORKER_URL?id=$TEST_ID"
+          retry "initial GET" "$WORKER_URL?id=$TEST_ID"
           echo
 
           echo "== POST save =="
-          curl -sS -f -X POST -H "Content-Type: application/json" \
+          retry "POST save" -X POST -H "Content-Type: application/json" \
             -d '{"name":"Verify Test"}' "$WORKER_URL?id=$TEST_ID"
           echo
 
           echo "== GET after save (expect saved name) =="
-          RESULT=$(curl -sS -f "$WORKER_URL?id=$TEST_ID")
+          RESULT=$(retry "GET after save" "$WORKER_URL?id=$TEST_ID")
           echo "$RESULT"
           echo "$RESULT" | grep -q "Verify Test"
 
           echo "== Pages HTML contains sync logic =="
-          HTML=$(curl -sS -f "$PAGES_URL")
+          HTML=$(retry "Pages HTML" "$PAGES_URL")
           echo "$HTML" | grep -q "WORKER_URL"
           echo "$HTML" | grep -q "My Link"
 
