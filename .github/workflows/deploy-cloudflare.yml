@@ -1,0 +1,83 @@
+name: Deploy Manual of Me to Cloudflare
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches:
+      - main
+      - claude/manual-of-me-cloudflare-fq3c1g
+    paths:
+      - 'worker/**'
+      - 'public/**'
+      - '.github/workflows/deploy-cloudflare.yml'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: a7e20bd5cf3b306f6b3d65d9b8364a47
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install wrangler
+        run: npm install -g wrangler
+
+      - name: Ensure KV namespace exists and is bound
+        working-directory: worker
+        run: |
+          set -e
+          if grep -q "kv_namespaces" wrangler.toml; then
+            echo "KV binding already present in wrangler.toml, skipping creation."
+            exit 0
+          fi
+
+          EXISTING_ID=$(wrangler kv namespace list | node -e "
+            let d='';
+            process.stdin.on('data', c => d += c);
+            process.stdin.on('end', () => {
+              const list = JSON.parse(d);
+              const ns = list.find(n => n.title === 'manual-of-me-api-MANUAL_OF_ME' || n.title === 'MANUAL_OF_ME');
+              console.log(ns ? ns.id : '');
+            });
+          ")
+
+          if [ -z "$EXISTING_ID" ]; then
+            echo "Creating KV namespace MANUAL_OF_ME..."
+            CREATE_OUT=$(wrangler kv namespace create MANUAL_OF_ME --json)
+            EXISTING_ID=$(echo "$CREATE_OUT" | node -e "
+              let d='';
+              process.stdin.on('data', c => d += c);
+              process.stdin.on('end', () => console.log(JSON.parse(d).id));
+            ")
+          fi
+
+          {
+            echo ""
+            echo "[[kv_namespaces]]"
+            echo "binding = \"MANUAL_OF_ME\""
+            echo "id = \"$EXISTING_ID\""
+          } >> wrangler.toml
+
+      - name: Deploy Worker
+        working-directory: worker
+        run: wrangler deploy
+
+      - name: Persist KV binding back to the repo
+        run: |
+          if ! git diff --quiet -- worker/wrangler.toml; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add worker/wrangler.toml
+            git commit -m "Add KV namespace binding to wrangler.toml"
+            git push origin HEAD:${GITHUB_REF#refs/heads/}
+          fi
+
+      - name: Deploy Pages
+        run: wrangler pages deploy public --project-name manual-of-me
