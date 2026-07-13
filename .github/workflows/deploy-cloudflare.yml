@@ -50,12 +50,14 @@ jobs:
 
           if [ -z "$EXISTING_ID" ]; then
             echo "Creating KV namespace MANUAL_OF_ME..."
-            CREATE_OUT=$(wrangler kv namespace create MANUAL_OF_ME --json)
-            EXISTING_ID=$(echo "$CREATE_OUT" | node -e "
-              let d='';
-              process.stdin.on('data', c => d += c);
-              process.stdin.on('end', () => console.log(JSON.parse(d).id));
-            ")
+            CREATE_OUT=$(wrangler kv namespace create MANUAL_OF_ME)
+            echo "$CREATE_OUT"
+            EXISTING_ID=$(echo "$CREATE_OUT" | grep -oE 'id[[:space:]]*=[[:space:]]*"[a-f0-9]+"' | grep -oE '[a-f0-9]{32}')
+          fi
+
+          if [ -z "$EXISTING_ID" ]; then
+            echo "Failed to determine KV namespace id" >&2
+            exit 1
           fi
 
           {
