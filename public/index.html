@@ -476,6 +476,50 @@ body {
 }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
+/* ─── PERSONAL LINK BANNER ───────────────────────────── */
+.personal-link-banner {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  width: 100%;
+  max-width: 8.5in;
+  padding: 10px 20px;
+  background: var(--pale-teal);
+  border-bottom: 2px solid var(--teal);
+  color: var(--purple);
+  font-size: 12.5px;
+  font-weight: 700;
+  text-align: center;
+}
+.personal-link-banner.show { display: flex; }
+.personal-link-banner .banner-link {
+  color: var(--purple);
+  font-weight: 900;
+  text-decoration: underline;
+  text-decoration-color: var(--pink);
+  text-underline-offset: 2px;
+  white-space: nowrap;
+}
+.personal-link-banner .banner-link:hover { color: var(--pink); }
+.personal-link-banner .banner-dismiss {
+  background: none;
+  border: none;
+  font-size: 16px;
+  font-weight: 900;
+  color: var(--purple);
+  opacity: 0.5;
+  cursor: pointer;
+  padding: 0 2px;
+  line-height: 1;
+}
+.personal-link-banner .banner-dismiss:hover { opacity: 1; }
+
+@media print {
+  .personal-link-banner { display: none !important; }
+}
+
 /* ─── PRINT ──────────────────────────────────────────── */
 @media print {
   html, body { background: white; padding: 0; }
@@ -537,6 +581,12 @@ html.printing-mode .card-bd .print-text { display: block; }
 <body>
 
 <div class="page">
+
+  <div class="personal-link-banner" id="personalLinkBanner">
+    <span id="personalLinkBannerText"></span>
+    <a class="banner-link" id="personalLinkStartNew" href="">🆕 Start a new one</a>
+    <button class="banner-dismiss" id="personalLinkDismiss" aria-label="Dismiss">×</button>
+  </div>
 
   <!-- ── HERO: photo on left, title on right, no overlap ── -->
   <div class="hero">
@@ -706,9 +756,33 @@ e.g. Thoughtful · Inspirational · Big thinker · Supportive" style="position:r
         document.getElementById('photoIcon').style.display = 'none';
         document.getElementById('photoHint').style.display = 'none';
       }
+      const hasContent = data.photo || FIELDS.some(f => data[f]);
+      if (hasContent) maybeShowPersonalLinkBanner(data);
     } catch (err) {
       showToast('⚠ Could not load saved data');
     }
+  }
+
+  function maybeShowPersonalLinkBanner(data) {
+    const dismissKey = `dismissedBanner_${id}`;
+    try {
+      if (localStorage.getItem(dismissKey)) return;
+    } catch (err) { /* localStorage unavailable — just show the banner */ }
+
+    const banner = document.getElementById('personalLinkBanner');
+    const textEl = document.getElementById('personalLinkBannerText');
+    const startNewLink = document.getElementById('personalLinkStartNew');
+    const dismissBtn = document.getElementById('personalLinkDismiss');
+
+    textEl.textContent = data.name
+      ? `📋 You're viewing "${data.name}"'s personal Manual of Me link.`
+      : `📋 This is someone's personal Manual of Me link.`;
+    startNewLink.href = location.origin + location.pathname;
+    dismissBtn.onclick = () => {
+      try { localStorage.setItem(dismissKey, '1'); } catch (err) { /* ignore */ }
+      banner.classList.remove('show');
+    };
+    banner.classList.add('show');
   }
 
   function copyLink() {
