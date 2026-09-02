@@ -312,6 +312,19 @@ body {
 .card-bd textarea::placeholder { font-weight: 400; }
 .card-bd textarea:focus { outline: none; }
 
+.card-bd .print-text {
+  display: none;
+  position: relative;
+  z-index: 1;
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.55;
+  color: inherit;
+}
+.card-bd .print-text p { margin: 0 0 0.9em; }
+.card-bd .print-text p:last-child { margin-bottom: 0; }
+
 /* ADMIRE — dark purple, white text */
 .card-admire               { background: var(--purple); border: 2px solid var(--purple); }
 .card-admire .card-hd      { background: rgba(0,0,0,0.22); color: var(--teal); }
@@ -466,19 +479,37 @@ body {
 /* ─── PRINT ──────────────────────────────────────────── */
 @media print {
   html, body { background: white; padding: 0; }
-  .page { width: 100%; height: auto; box-shadow: none; margin: 0; }
   .controls { display: none; }
   .toast { display: none; }
-
-  /* Let every section grow to fit its full text instead of clipping it —
-     textarea height is expanded to scrollHeight in JS just before print,
-     so these containers must be free to grow to match. */
-  .two-col { display: block; }
-  .card, .card-bd, .card-support { height: auto; min-height: 0; flex: none; overflow: visible; }
-  .card-bd textarea { overflow: visible; flex: none; }
-
-  @page { size: Letter; margin: 0; }
+  @page { size: 8.5in 22in; margin: 0; }
 }
+
+/* ─── PRINT LAYOUT (JS-driven, see prepareForPrint) ─────
+   A <textarea> can't be split across a page break in any browser — long
+   text just overflows or gets shoved whole onto the next page. So before
+   printing we swap each textarea for a plain flowing block and switch
+   every ancestor from flex/grid to normal block flow. That alone isn't
+   enough, though: Chromium's own print-pagination pass has a bug where it
+   miscalculates a growing colored box's height whenever the export needs
+   more than one page — either bleeding text across box boundaries or
+   silently clipping it, with no CSS combination avoiding both at once. So
+   the @page rule above is deliberately much taller than a normal one-pager
+   ever needs, so everything fits on a single page and that pagination bug
+   never triggers. (A JS-computed exact-fit page height looks tempting, but
+   printers/PDF exporters read @page dimensions before any 'beforeprint'
+   handler can change them, so a size set at print time is ignored — this
+   has to be a plain static value.) This is a plain class rather than
+   @media print because the browser only switches to print-media layout
+   *after* 'beforeprint' handlers finish, so a class we toggle ourselves is
+   what lets prepareForPrint build the print-text mirrors in time. */
+html.printing-mode .page { width: 100%; height: auto; box-shadow: none; margin: 0; display: block; }
+html.printing-mode .body-wrap { display: block; }
+html.printing-mode .two-col { display: block; }
+html.printing-mode .card,
+html.printing-mode .card-bd,
+html.printing-mode .card-support { height: auto; min-height: 0; flex: none; overflow: visible; display: block; }
+html.printing-mode .card-bd textarea { display: none; }
+html.printing-mode .card-bd .print-text { display: block; }
 
 /* ─── RESPONSIVE ─────────────────────────────────────── */
 @media (max-width: 820px) {
@@ -708,22 +739,36 @@ e.g. Thoughtful · Inspirational · Big thinker · Supportive" style="position:r
 
   window.addEventListener('load', load);
 
-  function expandTextareasForPrint() {
-    document.querySelectorAll('.card-bd textarea').forEach(el => {
-      el.dataset.printPrevHeight = el.style.height;
-      el.style.height = 'auto';
-      el.style.height = el.scrollHeight + 'px';
+  function buildPrintText(el) {
+    let mirror = el.nextElementSibling;
+    if (!mirror || !mirror.classList.contains('print-text')) {
+      mirror = document.createElement('div');
+      mirror.className = 'print-text';
+      el.insertAdjacentElement('afterend', mirror);
+    }
+    mirror.replaceChildren();
+    el.value.split(/\n{2,}/).forEach(paragraph => {
+      const p = document.createElement('p');
+      p.textContent = paragraph;
+      mirror.appendChild(p);
     });
   }
 
-  function restoreTextareasAfterPrint() {
-    document.querySelectorAll('.card-bd textarea').forEach(el => {
-      el.style.height = el.dataset.printPrevHeight || '';
-    });
+  function refreshPrintText() {
+    document.querySelectorAll('.card-bd textarea').forEach(buildPrintText);
   }
 
-  window.addEventListener('beforeprint', expandTextareasForPrint);
-  window.addEventListener('afterprint', restoreTextareasAfterPrint);
+  function prepareForPrint() {
+    refreshPrintText();
+    document.documentElement.classList.add('printing-mode');
+  }
+
+  function cleanupAfterPrint() {
+    document.documentElement.classList.remove('printing-mode');
+  }
+
+  window.addEventListener('beforeprint', prepareForPrint);
+  window.addEventListener('afterprint', cleanupAfterPrint);
 
   function savePDF() {
     alert('In the print dialog, set the destination to "Save as PDF" then click Save.');
